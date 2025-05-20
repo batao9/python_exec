@@ -20,10 +20,19 @@ load_dotenv(dotenv_path=dotenv_path, override=False)
 # Create the MCP server for the code interpreter
 mcp = FastMCP("Docker Code Interpreter")
 
-# Instantiate the interpreter with default container name, image (from DOCKER_IMAGE env or default), and host workdir
+# Instantiate the interpreter with default container name, image (from DOCKER_IMAGE env or default),
+# and separate host working directories for cp_in and cp_out
 docker_image = os.environ.get('DOCKER_IMAGE', 'python:3.10-slim')
-host_workdir = os.environ.get('WORKDIR', os.getcwd())
-interpreter = DockerInterpreter(image=docker_image, host_workdir=host_workdir)
+# Base workdir fallback
+base_workdir = os.environ.get('WORKDIR', os.getcwd())
+# Separate workdirs
+host_workdir_in = os.environ.get('WORKDIR_IN', base_workdir)
+host_workdir_out = os.environ.get('WORKDIR_OUT', base_workdir)
+interpreter = DockerInterpreter(
+    image=docker_image,
+    host_workdir_in=host_workdir_in,
+    host_workdir_out=host_workdir_out,
+)
 
 @mcp.tool(description="Initialize or start the Docker container.")
 def init(ctx: Context) -> str:
