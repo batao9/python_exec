@@ -92,6 +92,22 @@ class ServerTest(unittest.TestCase):
         result = server.reset(None)
         self.assertEqual(result, 'reset_output')
         self.assertEqual(self.fake.calls, [('reset', (), {})])
+    
+    def test_cp_in_default(self):
+        src = 'file.txt'
+        expected = '/workspace/file.txt'
+        result = server.cp_in(src, None, None)
+        self.assertEqual(result, f'cp_in_output for {src}->{expected}')
+        self.assertEqual(self.fake.calls[0][0], 'ensure_container')
+        self.assertEqual(self.fake.calls[1], ('cp_in', (src, expected), {}))
+
+    def test_cp_out_default(self):
+        container_src = '/container/path/data.csv'
+        expected = 'data.csv'
+        result = server.cp_out(container_src, None, None)
+        self.assertEqual(result, f'cp_out_output for {container_src}->{expected}')
+        self.assertEqual(self.fake.calls[0][0], 'ensure_container')
+        self.assertEqual(self.fake.calls[1], ('cp_out', (container_src, expected), {}))
 
 
 if __name__ == '__main__':

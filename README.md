@@ -4,8 +4,8 @@ Model Context Protocol (MCP) に対応した、Docker ベースの Python コー
 
 ## 特徴
 - Docker コンテナ内で Python コードまたはスクリプトを実行  
-- 成果物（画像など）をホストにコピー (`cp_out` ツール)  
-- ホスト上のファイルをコンテナにアップロード (`cp_in` ツール)  
+- コンテナのファイルをホスト作業ディレクトリ（WORKDIR）にダウンロード (`cp_out` ツール)  
+- ホスト作業ディレクトリ（WORKDIR）内のファイルをコンテナにアップロード (`cp_in` ツール)  
 - コンテナのリセット (`reset` ツール)  
 - コンテナにインストールされている Python パッケージを確認 (`list_packages` ツール)  
 - 初期状態のコンテナに MCP Python SDK (`mcp[cli]`) をプリインストール
@@ -47,6 +47,17 @@ mcp dev server.py
 python server.py
 # または
 mcp run server.py
+```
+
+### 作業ディレクトリの設定
+
+ファイルのアップロード・ダウンロードでは、WORKDIR 環境変数で指定されたディレクトリが作業ディレクトリとして扱われます。
+相対パスのみ許可され、`..` を使って上位ディレクトリへアクセスすることはできません。
+
+例:
+```bash
+export WORKDIR=/path/to/your/workdir
+python server.py
 ```
 
 ### Claude Desktopへのインストール

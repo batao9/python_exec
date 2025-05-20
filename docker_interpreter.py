@@ -1,10 +1,19 @@
 import subprocess
 
 
+from pathlib import Path
+
 class DockerInterpreter:
-    def __init__(self, container_name='mcp-code-interpreter', image='python:3.10-slim'):
+    def __init__(self, container_name='mcp-code-interpreter', image='python:3.10-slim', host_workdir: str = None):
+        """Initialize interpreter with container settings and host working directory."""
         self.container_name = container_name
         self.image = image
+        if host_workdir:
+            self.host_workdir = Path(host_workdir).resolve()
+        else:
+            self.host_workdir = Path.cwd().resolve()
+        if not self.host_workdir.is_dir():
+            raise ValueError(f"Host working directory does not exist: {self.host_workdir}")
 
     def run_command(self, cmd, capture_output=False, check=True, input=None):
         full_cmd = ['docker'] + cmd
@@ -104,14 +113,24 @@ class DockerInterpreter:
         return output
 
     def cp_in(self, src: str, dst: str) -> str:
-        """Copy file from host (src) into container at dst."""
-        self.run_command(['cp', src, f'{self.container_name}:{dst}'])
-        return f"Copied host:{src} to container:{dst}"
+        """Copy a file from host working directory into container at dst."""
+        # Resolve and validate source path under host_workdir
+        src_path = (self.host_workdir / src).resolve()
+        if self.host_workdir not in src_path.parents and src_path != self.host_workdir:
+            raise ValueError(f"Invalid source path: {src}")
+        self.run_command(['cp', str(src_path), f'{self.container_name}:{dst}'])
+        rel_src = src_path.relative_to(self.host_workdir).as_posix()
+        return f"Copied host:{rel_src} to container:{dst}"
 
     def cp_out(self, src: str, dst: str) -> str:
-        """Copy file from container (src) to host at dst."""
-        self.run_command(['cp', f'{self.container_name}:{src}', dst])
-        return f"Copied container:{src} to host:{dst}"
+        """Copy a file from container at src to host working directory at dst."""
+        # Resolve and validate destination path under host_workdir
+        dst_path = (self.host_workdir / dst).resolve()
+        if self.host_workdir not in dst_path.parents and dst_path != self.host_workdir:
+            raise ValueError(f"Invalid destination path: {dst}")
+        self.run_command(['cp', f'{self.container_name}:{src}', str(dst_path)])
+        rel_dst = dst_path.relative_to(self.host_workdir).as_posix()
+        return f"Copied container:{src} to host:{rel_dst}"
 
     def list_packages(self) -> str:
         """List installed Python packages inside the container."""

@@ -7,13 +7,22 @@ and reset the container state.
 """
 from mcp.server.fastmcp import FastMCP, Context
 
+# Specify host working directory via WORKDIR env var, default to current cwd
+import os
+from pathlib import Path
 from docker_interpreter import DockerInterpreter
+
+# Load environment variables from .env using python-dotenv (without overriding existing vars)
+from dotenv import load_dotenv
+dotenv_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=dotenv_path, override=False)
 
 # Create the MCP server for the code interpreter
 mcp = FastMCP("Docker Code Interpreter")
 
-# Instantiate the interpreter with default container name and image
-interpreter = DockerInterpreter()
+# Instantiate the interpreter with default container name, image, and host workdir
+host_workdir = os.environ.get('WORKDIR', os.getcwd())
+interpreter = DockerInterpreter(host_workdir=host_workdir)
 
 @mcp.tool(description="Initialize or start the Docker container.")
 def init(ctx: Context) -> str:
@@ -32,16 +41,27 @@ def run_file(path: str, ctx: Context) -> str:
     interpreter.ensure_container()
     return interpreter.exec_container_file(path)
 
-@mcp.tool(description="Upload a local file into the Docker container.")
-def cp_in(local_path: str, container_path: str, ctx: Context) -> str:
-    """Copy a file from host into the container."""
+@mcp.tool(description="Upload a file from host WORKDIR into the Docker container. local_path: relative path under WORKDIR. container_path (optional): target path inside container, defaults to /workspace/<basename>.")
+def cp_in(local_path: str, container_path: str | None = None, ctx: Context = None) -> str:
+    """Copy a file from host workdir into the container.
+    local_path: path relative to WORKDIR.
+    container_path: optional path inside container (defaults to /workspace/<basename of local_path>)."""
     interpreter.ensure_container()
+    # Determine default container path if not specified
+    if not container_path:
+        base = os.path.basename(local_path)
+        container_path = f"/workspace/{base}"
     return interpreter.cp_in(local_path, container_path)
 
-@mcp.tool(description="Download a file from the Docker container to the host.")
-def cp_out(container_path: str, local_path: str, ctx: Context) -> str:
-    """Copy a file from the container to the host."""
+@mcp.tool(description="Download a file from the Docker container into host WORKDIR. container_path: path inside container. local_path (optional): relative path under WORKDIR, defaults to basename of container_path.")
+def cp_out(container_path: str, local_path: str | None = None, ctx: Context = None) -> str:
+    """Copy a file from the container to host workdir.
+    container_path: path inside container.
+    local_path: optional relative path under WORKDIR (defaults to basename of container_path)."""
     interpreter.ensure_container()
+    # Determine default local path if not specified
+    if not local_path:
+        local_path = os.path.basename(container_path)
     return interpreter.cp_out(container_path, local_path)
 
 @mcp.tool(description="List installed Python packages inside the Docker container.")
