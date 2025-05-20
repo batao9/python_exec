@@ -108,6 +108,16 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(result, f'cp_out_output for {container_src}->{expected}')
         self.assertEqual(self.fake.calls[0][0], 'ensure_container')
         self.assertEqual(self.fake.calls[1], ('cp_out', (container_src, expected), {}))
+    
+    def test_cp_out_filename_only(self):
+        # When only filename is given, src is treated as /workspace/<filename>
+        filename = 'report.txt'
+        expected_src = f'/workspace/{filename}'
+        expected_dst = filename
+        result = server.cp_out(filename, None, None)
+        self.assertEqual(result, f'cp_out_output for {expected_src}->{expected_dst}')
+        self.assertEqual(self.fake.calls[0][0], 'ensure_container')
+        self.assertEqual(self.fake.calls[1], ('cp_out', (expected_src, expected_dst), {}))
 
 
 if __name__ == '__main__':

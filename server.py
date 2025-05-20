@@ -54,7 +54,7 @@ def cp_in(local_path: str, container_path: str | None = None, ctx: Context = Non
         container_path = f"/workspace/{base}"
     return interpreter.cp_in(local_path, container_path)
 
-@mcp.tool(description="Download a file from the Docker container into host WORKDIR. container_path: path inside container. local_path (optional): relative path under WORKDIR, defaults to basename of container_path.")
+@mcp.tool(description="Download a file from the Docker container into host WORKDIR. container_path: filename (treated as /workspace/<filename>) or full container path. local_path (optional): relative path under WORKDIR, defaults to basename of container_path.")
 def cp_out(container_path: str, local_path: str | None = None, ctx: Context = None) -> str:
     """Copy a file from the container to host workdir.
     container_path: path inside container.
@@ -63,7 +63,12 @@ def cp_out(container_path: str, local_path: str | None = None, ctx: Context = No
     # Determine default local path if not specified
     if not local_path:
         local_path = os.path.basename(container_path)
-    return interpreter.cp_out(container_path, local_path)
+    # If a bare filename is given, treat it as /workspace/<filename> inside container
+    if not container_path.startswith('/') and '/' not in container_path:
+        effective_src = f"/workspace/{container_path}"
+    else:
+        effective_src = container_path
+    return interpreter.cp_out(effective_src, local_path)
 
 @mcp.tool(description="List installed Python packages inside the Docker container.")
 def list_packages(ctx: Context) -> str:
