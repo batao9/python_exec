@@ -104,4 +104,4 @@ def reset(ctx: Context) -> str:
     return interpreter.reset()
 
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport='stdio')
