@@ -69,6 +69,18 @@ def cp_out(container_path: str, local_path: str | None = None, ctx: Context = No
     else:
         effective_src = container_path
     return interpreter.cp_out(effective_src, local_path)
+@mcp.tool(description="Edit or create a file inside the Docker container. container_path: filename (treated as /workspace/<filename>) or full container path. content: text to write into the file.")
+def edit_file(container_path: str, content: str, ctx: Context) -> str:
+    """Edit or create a file inside the container, writing the provided content.
+    container_path: filename or full container path.
+    content: file content to write."""
+    interpreter.ensure_container()
+    # Map bare filenames into /workspace
+    if not container_path.startswith('/') and '/' not in container_path:
+        effective_path = f"/workspace/{container_path}"
+    else:
+        effective_path = container_path
+    return interpreter.write_file(effective_path, content)
 
 @mcp.tool(description="List installed Python packages inside the Docker container.")
 def list_packages(ctx: Context) -> str:

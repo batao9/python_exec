@@ -36,6 +36,9 @@ class FakeInterpreter:
     def list_packages(self):
         self.calls.append(('list_packages', (), {}))
         return 'list_packages_output'
+    def write_file(self, container_path, content):
+        self.calls.append(('write_file', (container_path, content), {}))
+        return f'write_file_output for {container_path}'
 
     def reset(self):
         self.calls.append(('reset', (), {}))
@@ -92,6 +95,23 @@ class ServerTest(unittest.TestCase):
         result = server.reset(None)
         self.assertEqual(result, 'reset_output')
         self.assertEqual(self.fake.calls, [('reset', (), {})])
+    
+    def test_edit_file_fullpath(self):
+        path = '/data/config.txt'
+        content = 'hello world'
+        result = server.edit_file(path, content, None)
+        self.assertEqual(result, f'write_file_output for {path}')
+        self.assertEqual(self.fake.calls[0][0], 'ensure_container')
+        self.assertEqual(self.fake.calls[1], ('write_file', (path, content), {}))
+
+    def test_edit_file_filename(self):
+        filename = 'notes.md'
+        content = 'markdown content'
+        expected = '/workspace/notes.md'
+        result = server.edit_file(filename, content, None)
+        self.assertEqual(result, f'write_file_output for {expected}')
+        self.assertEqual(self.fake.calls[0][0], 'ensure_container')
+        self.assertEqual(self.fake.calls[1], ('write_file', (expected, content), {}))
     
     def test_cp_in_default(self):
         src = 'file.txt'

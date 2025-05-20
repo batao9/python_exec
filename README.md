@@ -8,6 +8,7 @@ Model Context Protocol (MCP) に対応した、Docker ベースの Python コー
 - ホスト作業ディレクトリ（WORKDIR）内のファイルをコンテナにアップロード (`cp_in` ツール)  
 - コンテナのリセット (`reset` ツール)  
 - コンテナにインストールされている Python パッケージを確認 (`list_packages` ツール)  
+- コンテナ内のファイルを作成・編集 (`edit_file` ツール)  
 - 初期状態のコンテナに MCP Python SDK (`mcp[cli]`) をプリインストール
 
 ## 必要要件
@@ -94,6 +95,9 @@ mcp run server.py run_code -- --code "print('Hello from Docker')"
 
 ```bash
 mcp run server.py list_packages
+```
+```bash
+mcp run server.py edit_file -- --container_path report.txt --content "Updated content"
 ```
 
 ## テスト

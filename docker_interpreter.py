@@ -111,6 +111,22 @@ class DockerInterpreter:
             output += f"\nstderr:\n{result.stderr}"
         output += f"\nExit code: {result.returncode}"
         return output
+    
+    def write_file(self, container_path: str, content: str) -> str:
+        """Create or overwrite a file inside the container with the given content."""
+        # Use shell redirection to write content into the container file
+        cmd = ['exec', '-i', self.container_name, 'sh', '-c', f'cat > {container_path}']
+        result = self.run_command(
+            cmd,
+            capture_output=True,
+            check=False,
+            input=content,
+        )
+        output = result.stdout or ""
+        if result.stderr:
+            output += f"\nstderr:\n{result.stderr}"
+        output += f"\nExit code: {result.returncode}"
+        return output
 
     def cp_in(self, src: str, dst: str) -> str:
         """Copy a file from host working directory into container at dst."""

@@ -59,6 +59,40 @@ class DockerInterpreterPathTest(unittest.TestCase):
     def test_cp_out_disallowed(self):
         with self.assertRaises(ValueError):
             self.di.cp_out("/container/src.py", "../outside.txt")
+   
+class DockerInterpreterWriteTest(unittest.TestCase):
+    def setUp(self):
+        self.di = DockerInterpreter(container_name="test", image="python:3.10-slim")
+        self.last_cmd = None
+        self.last_input = None
+        def fake_run(cmd, capture_output=False, check=True, input=None):
+            self.last_cmd = cmd
+            self.last_input = input
+            # Simulate writing OK
+            return subprocess.CompletedProcess(args=cmd, returncode=0, stdout="OK\n", stderr="")
+        self.di.run_command = fake_run
+
+    def test_write_file_success(self):
+        path = '/workspace/file.txt'
+        content = 'data'
+        result = self.di.write_file(path, content)
+        expected_cmd = ['exec', '-i', 'test', 'sh', '-c', f'cat > {path}']
+        self.assertEqual(self.last_cmd, expected_cmd)
+        self.assertEqual(self.last_input, content)
+        self.assertIn("OK", result)
+        self.assertTrue(result.strip().endswith("Exit code: 0"))
+
+    def test_write_file_error(self):
+        def fake_run_err(cmd, capture_output=False, check=True, input=None):
+            self.last_cmd = cmd
+            self.last_input = input
+            return subprocess.CompletedProcess(args=cmd, returncode=1, stdout="", stderr="err")
+        self.di.run_command = fake_run_err
+        path = '/workspace/file2.txt'
+        content = 'fail'
+        result = self.di.write_file(path, content)
+        self.assertIn("stderr:\nerr", result)
+        self.assertTrue(result.strip().endswith("Exit code: 1"))
 
 if __name__ == "__main__":
     unittest.main()
