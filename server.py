@@ -26,11 +26,11 @@ def run_code(code: str, ctx: Context) -> str:
     interpreter.ensure_container()
     return interpreter.exec_code(code)
 
-@mcp.tool(description="Execute a local Python script file inside the Docker container.")
+@mcp.tool(description="Execute a Python script file inside the Docker container by specifying its path within the container.")
 def run_file(path: str, ctx: Context) -> str:
-    """Execute a Python script file inside the container."""
+    """Execute a Python script file inside the container (container-internal path)."""
     interpreter.ensure_container()
-    return interpreter.exec_file(path)
+    return interpreter.exec_container_file(path)
 
 @mcp.tool(description="Upload a local file into the Docker container.")
 def cp_in(local_path: str, container_path: str, ctx: Context) -> str:

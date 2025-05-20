@@ -89,6 +89,19 @@ class DockerInterpreter:
             output += f"\nstderr:\n{result.stderr}"
         output += f"\nExit code: {result.returncode}"
         return output
+    
+    def exec_container_file(self, container_path: str) -> str:
+        """Execute a Python script file at the given path inside the container."""
+        result = self.run_command(
+            ['exec', self.container_name, 'python', container_path],
+            capture_output=True,
+            check=False,
+        )
+        output = result.stdout or ""
+        if result.stderr:
+            output += f"\nstderr:\n{result.stderr}"
+        output += f"\nExit code: {result.returncode}"
+        return output
 
     def cp_in(self, src: str, dst: str) -> str:
         """Copy file from host (src) into container at dst."""

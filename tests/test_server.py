@@ -17,6 +17,10 @@ class FakeInterpreter:
         self.calls.append(('exec_code', (code,), {}))
         return f'exec_code_output for {code}'
 
+    def exec_container_file(self, path):
+        self.calls.append(('exec_container_file', (path,), {}))
+        return f'exec_container_file_output for {path}'
+
     def exec_file(self, path):
         self.calls.append(('exec_file', (path,), {}))
         return f'exec_file_output for {path}'
@@ -58,9 +62,9 @@ class ServerTest(unittest.TestCase):
     def test_run_file(self):
         path = 'script.py'
         result = server.run_file(path, None)
-        self.assertEqual(result, f'exec_file_output for {path}')
+        self.assertEqual(result, f'exec_container_file_output for {path}')
         self.assertEqual(self.fake.calls[0][0], 'ensure_container')
-        self.assertEqual(self.fake.calls[1], ('exec_file', (path,), {}))
+        self.assertEqual(self.fake.calls[1], ('exec_container_file', (path,), {}))
 
     def test_cp_in(self):
         src = 'local.txt'
