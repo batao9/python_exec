@@ -13,21 +13,22 @@ from pathlib import Path
 from docker_interpreter import DockerInterpreter
 
 # Load environment variables from .env using python-dotenv (without overriding existing vars)
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 dotenv_path = Path(__file__).parent / '.env'
-load_dotenv(dotenv_path=dotenv_path, override=False)
+# Load configuration from .env (highest priority) then environment
+env_config = dotenv_values(dotenv_path)
 
 # Create the MCP server for the code interpreter
 mcp = FastMCP("Docker Code Interpreter")
 
-# Instantiate the interpreter with default container name, image (from DOCKER_IMAGE env or default),
-# and separate host working directories for cp_in and cp_out
-docker_image = os.environ.get('DOCKER_IMAGE', 'python:3.10-slim')
-# Base workdir fallback
-base_workdir = os.environ.get('WORKDIR', os.getcwd())
-# Separate workdirs
-host_workdir_in = os.environ.get('WORKDIR_IN', base_workdir)
-host_workdir_out = os.environ.get('WORKDIR_OUT', base_workdir)
+# Instantiate the interpreter with container name, image, and separate host workdirs
+# Priority: .env > environment > default
+docker_image = env_config.get('DOCKER_IMAGE') or os.environ.get('DOCKER_IMAGE', 'python:3.10-slim')
+# Base workdir (legacy) fallback
+base_workdir = env_config.get('WORKDIR') or os.environ.get('WORKDIR') or os.getcwd()
+# Separate workdirs for cp_in and cp_out
+host_workdir_in = env_config.get('WORKDIR_IN') or os.environ.get('WORKDIR_IN') or base_workdir
+host_workdir_out = env_config.get('WORKDIR_OUT') or os.environ.get('WORKDIR_OUT') or base_workdir
 interpreter = DockerInterpreter(
     image=docker_image,
     host_workdir_in=host_workdir_in,

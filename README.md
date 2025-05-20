@@ -24,6 +24,28 @@ conda activate mcp
 pip install -r requirements.txt
 ```
 
+### uv を用いたプロジェクトセットアップ
+
+本リポジトリでは、[uv](https://docs.astral.sh/uv/) を用いた Python プロジェクト管理をサポートします。
+uv がインストールされていない場合は、次のようにインストールします。
+```bash
+pip install uv
+```
+プロジェクトディレクトリで以下を実行して初期化します。
+```bash
+uv init my-mcp-server
+cd my-mcp-server
+```
+依存パッケージを追加します。
+```bash
+uv add "mcp[cli]" python-dotenv uvicorn
+```
+依存のインストールとスクリプトの実行には以下を利用できます。
+```bash
+uv install
+uv run python server.py
+```
+
 ## 使い方
 
 以下の手順でサーバを実行およびツールを利用できます。
