@@ -16,13 +16,6 @@ Model Context Protocol (MCP) に対応した、Docker ベースの Python コー
 - Python 3.10+  
 - Conda (optional) または `pip install -r requirements.txt`
 
-## インストール
-
-```bash
-conda create -n mcp python=3.13 pip -y
-conda activate mcp
-pip install -r requirements.txt
-```
 
 ### uv を用いたプロジェクトセットアップ
 
@@ -31,20 +24,9 @@ uv がインストールされていない場合は、次のようにインス�
 ```bash
 pip install uv
 ```
-プロジェクトディレクトリで以下を実行して初期化します。
-```bash
-uv init my-mcp-server
-cd my-mcp-server
-```
 依存パッケージを追加します。
 ```bash
-uv add "mcp[cli]" python-dotenv uvicorn
-```
-依存のインストールとスクリプトの実行には以下を利用できます。
-```bash
-uv install
-uv run python server.py
-```
+uv sync
 
 ## 使い方
 
@@ -67,9 +49,7 @@ mcp dev server.py
 ### サーバの直接起動
 
 ```bash
-python server.py
-# または
-mcp run server.py
+uv run python server.py
 ```
 
 ### 作業ディレクトリの設定
@@ -81,67 +61,36 @@ mcp run server.py
 例:
 ```bash
 export WORKDIR=/path/to/your/workdir
-python server.py
+```
+もしくは
+```.env
+WORKDIR_IN='/path/to/upload/dir'
+WORKDIR_OUT='/path/to/downloads/dir'
 ```
 
 ### Docker イメージの指定
 
 コンテナで利用する Python Docker イメージは、`DOCKER_IMAGE` 環境変数または `.env` ファイルで指定できます。
 ```bash
-export DOCKER_IMAGE=python:3.9-slim
-python server.py
+export DOCKER_IMAGE=python:3.13-slim
+```
+もしくは
+```.env
+DOCKER_IMAGE='python:3.13-slim'
 ```
 
-### Claude Desktopへのインストール
-
+### MCP Inspectorによるテスト
 ```bash
-mcp install server.py
+mcp dev server.py
 ```
 
-- カスタム名を指定: `--name`
-
-```bash
-mcp install server.py --name "Docker Code Interpreter"
-```
-
-- 環境変数を指定: `-v` または `-f .env`
-
-```bash
-mcp install server.py -v API_KEY=abc123 -f .env
-```
-
-### ツールの実行例
-
-```bash
-mcp run server.py run_code -- --code "print('Hello from Docker')"
-```
-
-```bash
-mcp run server.py list_packages
-```
-```bash
-mcp run server.py edit_file -- --container_path report.txt --content "Updated content"
-```
-
-## テスト
-
-```bash
-python -m unittest
-```
 
 ## 推奨 Docker イメージ (データ分析向け)
+```bash
+docker build -t code_interpreter .
+```
 
-データ分析や機械学習の用途には、以下の Python パッケージがよく利用されます。
-- numpy: 数値計算
-- pandas: データフレーム操作
-- scipy: 科学計算
-- scikit-learn: 機械学習
-- matplotlib: 基本的な可視化
-- seaborn: 統計可視化
-- jupyter：インタラクティブ実行環境
-- plotly: 対話型可視化
-
-これらをまとめて利用したい場合、以下のような Docker イメージがおすすめです。  
-- jupyter/scipy-notebook: Jupyter Notebook や上記パッケージがプリインストールされた公式イメージ  
+ほかのイメージを利用したい場合、以下のような Docker イメージがおすすめです。  
+- jupyter/scipy-notebook: Jupyter Notebook や数値計算向けパッケージがプリインストールされた公式イメージ  
 - continuumio/miniconda3: Conda 環境で柔軟にパッケージを管理できるイメージ  
-- python:3.10-slim ベースに `pip install numpy pandas scipy scikit-learn matplotlib seaborn jupyter plotly` を行うカスタムイメージ
+- python:3.13-slim ベースに `pip install numpy pandas scipy scikit-learn matplotlib seaborn jupyter plotly` を行うカスタムイメージ
