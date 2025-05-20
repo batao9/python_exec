@@ -60,6 +60,14 @@ export WORKDIR=/path/to/your/workdir
 python server.py
 ```
 
+### Docker イメージの指定
+
+コンテナで利用する Python Docker イメージは、`DOCKER_IMAGE` 環境変数または `.env` ファイルで指定できます。
+```bash
+export DOCKER_IMAGE=python:3.9-slim
+python server.py
+```
+
 ### Claude Desktopへのインストール
 
 ```bash
@@ -93,3 +101,20 @@ mcp run server.py list_packages
 ```bash
 python -m unittest
 ```
+
+## 推奨 Docker イメージ (データ分析向け)
+
+データ分析や機械学習の用途には、以下の Python パッケージがよく利用されます。
+- numpy: 数値計算
+- pandas: データフレーム操作
+- scipy: 科学計算
+- scikit-learn: 機械学習
+- matplotlib: 基本的な可視化
+- seaborn: 統計可視化
+- jupyter：インタラクティブ実行環境
+- plotly: 対話型可視化
+
+これらをまとめて利用したい場合、以下のような Docker イメージがおすすめです。  
+- jupyter/scipy-notebook: Jupyter Notebook や上記パッケージがプリインストールされた公式イメージ  
+- continuumio/miniconda3: Conda 環境で柔軟にパッケージを管理できるイメージ  
+- python:3.10-slim ベースに `pip install numpy pandas scipy scikit-learn matplotlib seaborn jupyter plotly` を行うカスタムイメージ
