@@ -29,9 +29,9 @@ class FakeInterpreter:
         self.calls.append(('cp_out', (src, dst), {}))
         return f'cp_out_output for {src}->{dst}'
 
-    def install(self, packages):
-        self.calls.append(('install', (packages,), {}))
-        return f'install_output for {packages}'
+    def list_packages(self):
+        self.calls.append(('list_packages', (), {}))
+        return 'list_packages_output'
 
     def reset(self):
         self.calls.append(('reset', (), {}))
@@ -78,12 +78,11 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.fake.calls[0][0], 'ensure_container')
         self.assertEqual(self.fake.calls[1], ('cp_out', (src, dst), {}))
 
-    def test_install(self):
-        pkgs = ['requests', 'numpy']
-        result = server.install(pkgs, None)
-        self.assertEqual(result, f'install_output for {pkgs}')
+    def test_list_packages(self):
+        result = server.list_packages(None)
+        self.assertEqual(result, 'list_packages_output')
         self.assertEqual(self.fake.calls[0][0], 'ensure_container')
-        self.assertEqual(self.fake.calls[1], ('install', (pkgs,), {}))
+        self.assertEqual(self.fake.calls[1], ('list_packages', (), {}))
 
     def test_reset(self):
         result = server.reset(None)

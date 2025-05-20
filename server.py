@@ -44,11 +44,11 @@ def cp_out(container_path: str, local_path: str, ctx: Context) -> str:
     interpreter.ensure_container()
     return interpreter.cp_out(container_path, local_path)
 
-@mcp.tool(description="Install Python packages inside the Docker container.")
-def install(packages: list[str], ctx: Context) -> str:
-    """Install Python packages inside the container."""
+@mcp.tool(description="List installed Python packages inside the Docker container.")
+def list_packages(ctx: Context) -> str:
+    """List installed Python packages inside the container."""
     interpreter.ensure_container()
-    return interpreter.install(packages)
+    return interpreter.list_packages()
 
 @mcp.tool(description="Reset the Docker container to initial state.")
 def reset(ctx: Context) -> str:

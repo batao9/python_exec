@@ -100,10 +100,10 @@ class DockerInterpreter:
         self.run_command(['cp', f'{self.container_name}:{src}', dst])
         return f"Copied container:{src} to host:{dst}"
 
-    def install(self, packages: list[str]) -> str:
-        """Install Python packages inside the container."""
+    def list_packages(self) -> str:
+        """List installed Python packages inside the container."""
         result = self.run_command(
-            ['exec', self.container_name, 'pip', 'install'] + packages,
+            ['exec', self.container_name, 'pip', 'list'],
             capture_output=True,
             check=False,
         )
