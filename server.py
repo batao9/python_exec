@@ -71,22 +71,22 @@ def run_file(path: str, ctx: Context) -> str:
     interpreter.ensure_container()
     return interpreter.exec_container_file(path)
 
-@mcp.tool(
-    description='Upload a file from host UPLOAD_DIR into the Docker container. \n'+
-                'local_path: filename (treated as UPLOAD_DIR/<filename>)\n'+
-                'container_path (optional): target path inside container, defaults to /workspace/<basename>.'+
-                'Usually does not need to be specified.'
-    )
-def cp_in(local_path: str, container_path: str | None = None, ctx: Context = None) -> str:
-    """Copy a file from host UPLOAD_DIR into the container.
-    local_path: path relative to UPLOAD_DIR.
-    container_path: optional path inside container (defaults to /workspace/<basename of local_path>)."""
-    interpreter.ensure_container()
-    # Determine default container path if not specified
-    if not container_path:
-        base = os.path.basename(local_path)
-        container_path = f"/workspace/{base}"
-    return interpreter.cp_in(local_path, container_path)
+# @mcp.tool(
+#     description='Upload a file from host UPLOAD_DIR into the Docker container. \n'+
+#                 'local_path: filename (treated as UPLOAD_DIR/<filename>)\n'+
+#                 'container_path (optional): target path inside container, defaults to /workspace/<basename>.'+
+#                 'Usually does not need to be specified.'
+#     )
+# def cp_in(local_path: str, container_path: str | None = None, ctx: Context = None) -> str:
+#     """Copy a file from host UPLOAD_DIR into the container.
+#     local_path: path relative to UPLOAD_DIR.
+#     container_path: optional path inside container (defaults to /workspace/<basename of local_path>)."""
+#     interpreter.ensure_container()
+#     # Determine default container path if not specified
+#     if not container_path:
+#         base = os.path.basename(local_path)
+#         container_path = f"/workspace/{base}"
+#     return interpreter.cp_in(local_path, container_path)
 
 @mcp.tool(
     description='Download a file from the Docker container into host DOWNLOAD_DIR. \n'+
