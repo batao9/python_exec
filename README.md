@@ -24,19 +24,19 @@ uv がインストールされていない場合は、次のようにインス�
 ```bash
 pip install uv
 ```
+もしくは
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 依存パッケージを追加します。
 ```bash
 uv sync
-
+source .venv/bin/activate
+```
 ## 使い方
 
 以下の手順でサーバを実行およびツールを利用できます。
 
-### 依存関係のインストール
-
-```bash
-pip install -r requirements.txt
-```
 
 ### 開発モードでの起動
 
