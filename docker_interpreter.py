@@ -65,6 +65,13 @@ class DockerInterpreter:
         if self.container_exists():
             if self.container_running():
                 messages.append(f"Container '{self.container_name}' is already running.")
+                # Remove all files in the default workdir (/workspace) when already running
+                messages.append("Removing all files in default workdir '/workspace'...")
+                # delete all contents under /workspace without removing the directory itself
+                self.run_command([
+                    'exec', self.container_name,
+                    'sh', '-c', 'find /workspace -mindepth 1 -delete'
+                ])
                 return "\n".join(messages)
             messages.append(f"Starting existing container '{self.container_name}'.")
             self.run_command(['start', self.container_name])

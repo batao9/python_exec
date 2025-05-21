@@ -34,6 +34,8 @@ interpreter = DockerInterpreter(
     host_workdir_in=host_workdir_in,
     host_workdir_out=host_workdir_out,
 )
+# Legacy alias: ensure host_workdir reflects base WORKDIR setting (from .env or env var)
+interpreter.host_workdir = Path(base_workdir).resolve()
 
 @mcp.tool(description="Initialize or start the Docker container.")
 def init(ctx: Context) -> str:
