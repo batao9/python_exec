@@ -39,7 +39,7 @@ interpreter.host_workdir = Path(base_workdir).resolve()
 
 @mcp.tool(
     description='Initialize or start the Docker container. \n'+
-                'Use this tool if you need to initialize or start a Docker container /workspace.'
+                'Use this tool if you need to initialize `/workspace` directory or start a Docker container .'
     )
 def init(ctx: Context) -> str:
     """Initialize or start the Docker container and install MCP SDK."""
