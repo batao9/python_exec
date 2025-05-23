@@ -51,7 +51,7 @@ def init(ctx: Context) -> str:
                 'Use this tool when you need to run Python code to get an answer. \n'+
                 'Input must be a valid Python expression or statement. \n'+
                 'Results are displayed in the console, so use functions like print() to print the results. \n'+
-                'If you need output graphs or files, also use the cp_out tool.',
+                'If you need to pass an output graph or file to the user, also use the cp_out tool. '
     )
 def run_code(code: str, ctx: Context) -> str:
     """Execute Python code in the container."""
@@ -64,7 +64,7 @@ def run_code(code: str, ctx: Context) -> str:
                 'Use this tool when you need to run a Python script to get an answer. \n'+
                 'Input can be a relative path from the working directory or an absolute path. \n'+
                 'The script will be executed in the container, and the output will be displayed in the console. \n'+
-                'If you need output graphs or files, also use the cp_out tool.',
+                'If you need to pass an output graph or file to the user, also use the cp_out tool. '
     )
 def run_file(path: str, ctx: Context) -> str:
     """Execute a Python script file inside the container (container-internal path)."""
