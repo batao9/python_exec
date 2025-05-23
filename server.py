@@ -46,7 +46,7 @@ def init(ctx: Context) -> str:
     return interpreter.init_container()
 
 @mcp.tool(
-    description='Run Python Code: \n'+
+    description='Docker Code Interpreter: Run Python Code: \n'+
                 'code: Python code to execute. \n'+
                 'Use this tool when you need to run Python code to get an answer. \n'+
                 'Input must be a valid Python expression or statement. \n'+
@@ -59,7 +59,7 @@ def run_code(code: str, ctx: Context) -> str:
     return interpreter.exec_code(code)
 
 @mcp.tool(
-    description='Run Python Script: \n'+
+    description='Docker Code Interpreter: Run Python Script: \n'+
                 'path: filename (treated as /workspace/<filename>) or full container path. \n'+ 
                 'Use this tool when you need to run a Python script to get an answer. \n'+
                 'Input can be a relative path from the working directory or an absolute path. \n'+
@@ -71,25 +71,25 @@ def run_file(path: str, ctx: Context) -> str:
     interpreter.ensure_container()
     return interpreter.exec_container_file(path)
 
-# @mcp.tool(
-#     description='Upload a file from host UPLOAD_DIR into the Docker container. \n'+
-#                 'local_path: filename (treated as UPLOAD_DIR/<filename>)\n'+
-#                 'container_path (optional): target path inside container, defaults to /workspace/<basename>.'+
-#                 'Usually does not need to be specified.'
-#     )
-# def cp_in(local_path: str, container_path: str | None = None, ctx: Context = None) -> str:
-#     """Copy a file from host UPLOAD_DIR into the container.
-#     local_path: path relative to UPLOAD_DIR.
-#     container_path: optional path inside container (defaults to /workspace/<basename of local_path>)."""
-#     interpreter.ensure_container()
-#     # Determine default container path if not specified
-#     if not container_path:
-#         base = os.path.basename(local_path)
-#         container_path = f"/workspace/{base}"
-#     return interpreter.cp_in(local_path, container_path)
+@mcp.tool(
+    description='Docker Code Interpreter: Upload a file from host UPLOAD_DIR into the Docker container. \n'+
+                'local_path: filename (treated as UPLOAD_DIR/<filename>)\n'+
+                'container_path (optional): target path inside container, defaults to /workspace/<basename>.'+
+                'Usually does not need to be specified.'
+    )
+def cp_in(local_path: str, container_path: str | None = None, ctx: Context = None) -> str:
+    """Copy a file from host UPLOAD_DIR into the container.
+    local_path: path relative to UPLOAD_DIR.
+    container_path: optional path inside container (defaults to /workspace/<basename of local_path>)."""
+    interpreter.ensure_container()
+    # Determine default container path if not specified
+    if not container_path:
+        base = os.path.basename(local_path)
+        container_path = f"/workspace/{base}"
+    return interpreter.cp_in(local_path, container_path)
 
 @mcp.tool(
-    description='Download a file from the Docker container into host DOWNLOAD_DIR. \n'+
+    description='Docker Code Interpreter: Download a file from the Docker container into host DOWNLOAD_DIR. \n'+
                 'container_path: filename (treated as /workspace/<filename>) or full container path. \n'+
                 'local_path (optional): relative path under DOWNLOAD_DIR, defaults to basename of container_path.'+
                 'Usually does not need to be specified.'
@@ -110,7 +110,7 @@ def cp_out(container_path: str, local_path: str | None = None, ctx: Context = No
     return interpreter.cp_out(effective_src, local_path)
 
 @mcp.tool(
-    description='Edit or create a file inside the Docker container. \n'+
+    description='Docker Code Interpreter: Edit or create a file inside the Docker container. \n'+
                 'container_path: filename (treated as /workspace/<filename>) or full container path. \n'+
                 'content: text to write into the file. \n'+
                 'If you want to provide a file to a user, also use the cp_out tool.'
@@ -129,7 +129,7 @@ def edit_file(container_path: str, content: str, ctx: Context) -> str:
     return interpreter.write_file(effective_path, content)
 
 @mcp.tool(
-    description='List installed Python packages inside the Docker container. \n'+
+    description='Docker Code Interpreter: List installed Python packages inside the Docker container. \n'+
                 'Use this tool when you need to list the installed packages in the container.'
     )
 def list_packages(ctx: Context) -> str:
@@ -138,7 +138,7 @@ def list_packages(ctx: Context) -> str:
     return interpreter.list_packages()
 
 @mcp.tool(
-    description='Reset the Docker container to initial state. \n'+
+    description='Docker Code Interpreter: Reset the Docker container to initial state. \n'+
                 'Use this tool when you need to reset the container to its initial state.'
     )
 def reset(ctx: Context) -> str:
