@@ -11,14 +11,21 @@ RUN apt-get update && \
         liblapack-dev && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
+    RUN pip install --no-cache-dir \
         numpy \
         pandas \
         scipy \
         matplotlib \
         seaborn \
         pillow \
-        opencv-python-headless
+        opencv-python-headless \
+        japanize-matplotlib \
+        openpyxl \
+        requests \
+        scikit-learn \
+        plotly \
+        python-docx \
+        beautifulsoup4
     
 WORKDIR /workspace
 
