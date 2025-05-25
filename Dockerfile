@@ -1,5 +1,5 @@
 # ベースイメージに python:3.13-slim を指定
-FROM python:3.13-slim
+FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -19,7 +19,7 @@ RUN apt-get update && \
         seaborn \
         pillow \
         opencv-python-headless \
-        matplotlib-fontja \
+        japanize-matplotlib \
         openpyxl \
         requests \
         scikit-learn \
