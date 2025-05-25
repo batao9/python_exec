@@ -19,7 +19,7 @@ RUN apt-get update && \
         seaborn \
         pillow \
         opencv-python-headless \
-        japanize-matplotlib \
+        matplotlib-fontja \
         openpyxl \
         requests \
         scikit-learn \
