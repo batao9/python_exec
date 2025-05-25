@@ -52,6 +52,16 @@ mcp dev server.py
 uv run python server.py
 ```
 
+### コマンドライン引数での作業ディレクトリ指定
+`WORKDIR_IN` と `WORKDIR_OUT` をコマンドライン引数で直接指定できます。環境変数や `.env` の設定よりも優先されます。
+```bash
+python server.py --WORKDIR_IN /path/to/upload/dir --WORKDIR_OUT /path/to/download/dir
+```
+MCP CLI 経由でも同様に指定可能です:
+```bash
+mcp dev server.py --WORKDIR_IN /path/to/upload --WORKDIR_OUT /path/to/download
+```
+
 ### 作業ディレクトリの設定
 
 ファイルのアップロード（cp_in）には `WORKDIR_IN`、ダウンロード（cp_out）には `WORKDIR_OUT` 環境変数で指定されたディレクトリがそれぞれ作業ディレクトリとして扱われます。

@@ -5,36 +5,49 @@ Provides tools to initialize and manage a Docker container,
 execute Python code or scripts, transfer files, install packages,
 and reset the container state.
 """
+# Standard library imports
+import sys
+import os
+import argparse
+from pathlib import Path
+
+# Third-party imports
+from dotenv import dotenv_values
 from mcp.server.fastmcp import FastMCP, Context
 
-# Specify host working directory via WORKDIR env var, default to current cwd
-import os
-from pathlib import Path
+# Local imports
 from docker_interpreter import DockerInterpreter
 
-# Load environment variables from .env using python-dotenv (without overriding existing vars)
-from dotenv import dotenv_values
+# Load .env variables (does not override existing environment vars)
 dotenv_path = Path(__file__).parent / '.env'
-# Load configuration from .env (highest priority) then environment
 env_config = dotenv_values(dotenv_path)
 
-# Create the MCP server for the code interpreter
-mcp = FastMCP("Docker Code Interpreter")
+# Parse command-line overrides for input/output directories
+parser = argparse.ArgumentParser(add_help=False)
+parser.add_argument('--WORKDIR_IN')
+parser.add_argument('--WORKDIR_OUT')
+args, remaining_args = parser.parse_known_args()
+workdir_in_cli = args.WORKDIR_IN
+workdir_out_cli = args.WORKDIR_OUT
+# Ensure FastMCP sees only its own args
+sys.argv = [sys.argv[0]] + remaining_args
 
-# Instantiate the interpreter with container name, image, and separate host workdirs
-# Priority: .env > environment > default
+# Determine Docker image
 docker_image = env_config.get('DOCKER_IMAGE') or os.environ.get('DOCKER_IMAGE', 'python:3.10-slim')
-# Base workdir (legacy) fallback
+# Determine base workdir (legacy WORKDIR)
 base_workdir = env_config.get('WORKDIR') or os.environ.get('WORKDIR') or os.getcwd()
-# Separate workdirs for cp_in and cp_out
-host_workdir_in = env_config.get('WORKDIR_IN') or os.environ.get('WORKDIR_IN') or base_workdir
-host_workdir_out = env_config.get('WORKDIR_OUT') or os.environ.get('WORKDIR_OUT') or base_workdir
+# Determine separate workdirs for input/output (CLI > .env > env var > base)
+host_workdir_in = workdir_in_cli or env_config.get('WORKDIR_IN') or os.environ.get('WORKDIR_IN') or base_workdir
+host_workdir_out = workdir_out_cli or env_config.get('WORKDIR_OUT') or os.environ.get('WORKDIR_OUT') or base_workdir
+
+# Instantiate MCP server and Docker interpreter
+mcp = FastMCP("Docker Code Interpreter")
 interpreter = DockerInterpreter(
     image=docker_image,
     host_workdir_in=host_workdir_in,
     host_workdir_out=host_workdir_out,
 )
-# Legacy alias: ensure host_workdir reflects base WORKDIR setting (from .env or env var)
+# Legacy alias: host_workdir remains base_workdir
 interpreter.host_workdir = Path(base_workdir).resolve()
 
 @mcp.tool(
