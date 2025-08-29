@@ -1,15 +1,21 @@
 """
 MCP server exposing Docker-based Python code interpreter tools.
 
-Provides tools to initialize and manage a Docker container,
-execute Python code or scripts, transfer files, install packages,
-and reset the container state.
+Now supports ephemeral per-response sessions so that files from one
+interaction do not leak into another. A session is identified by a
+session_id issued by init(). Each tool accepts an optional session_id.
+If omitted, a one-shot ephemeral session is created for that single
+call and then cleaned up immediately.
 """
 # Standard library imports
 import sys
 import os
 import argparse
 from pathlib import Path
+import time
+import threading
+import secrets
+from typing import Optional
 
 # Third-party imports
 from dotenv import dotenv_values
@@ -50,113 +56,224 @@ interpreter = DockerInterpreter(
 # Legacy alias: host_workdir remains base_workdir
 interpreter.host_workdir = Path(base_workdir).resolve()
 
+# -----------------------------
+# Session management (in-process)
+# -----------------------------
+SESSION_BASE_DIR = "/workspace/sessions"
+SESSION_TTL_SECONDS = int(os.environ.get("PY_EXEC_SESSION_TTL", "600"))
+SESSION_MAX = int(os.environ.get("PY_EXEC_SESSION_MAX", "32"))
+
+_sessions: dict[str, tuple[float, float]] = {}
+_lock = threading.Lock()
+_janitor_started = False
+
+def _ensure_base_dir():
+    # interpreter.ensure_container() is called by the caller
+    try:
+        if hasattr(interpreter, 'make_dir'):
+            interpreter.make_dir(SESSION_BASE_DIR)
+    except Exception:
+        pass
+
+def _new_session_id() -> str:
+    return secrets.token_hex(8)
+
+def _session_path(session_id: str) -> str:
+    return f"{SESSION_BASE_DIR}/{session_id}"
+
+def _touch(session_id: str) -> None:
+    now = time.time()
+    with _lock:
+        if session_id in _sessions:
+            created = _sessions[session_id][1]
+            _sessions[session_id] = (now, created)
+
+def _create_session() -> str:
+    session_id = _new_session_id()
+    session_dir = _session_path(session_id)
+    if hasattr(interpreter, 'make_dir'):
+            interpreter.make_dir(session_dir)
+    now = time.time()
+    with _lock:
+        _sessions[session_id] = (now, now)
+        if len(_sessions) > SESSION_MAX:
+            to_remove = sorted(_sessions.items(), key=lambda kv: kv[1][0])[: len(_sessions) - SESSION_MAX]
+            for sid, _ in to_remove:
+                try:
+                    interpreter.remove_dir(_session_path(sid))
+                finally:
+                    _sessions.pop(sid, None)
+    return session_id
+
+def _remove_session(session_id: str) -> None:
+    with _lock:
+        _sessions.pop(session_id, None)
+    try:
+        if hasattr(interpreter, 'remove_dir'):
+            interpreter.remove_dir(_session_path(session_id))
+    except Exception:
+        pass
+
+def _cleanup_expired():
+    now = time.time()
+    expired: list[str] = []
+    with _lock:
+        for sid, (last_used, _created) in list(_sessions.items()):
+            if now - last_used > SESSION_TTL_SECONDS:
+                expired.append(sid)
+    for sid in expired:
+        _remove_session(sid)
+
+def _start_janitor_once():
+    global _janitor_started
+    if _janitor_started:
+        return
+    _janitor_started = True
+
+    def _loop():
+        while True:
+            try:
+                _cleanup_expired()
+            except Exception:
+                pass
+            time.sleep(60)
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+
+_start_janitor_once()
+
+class _SessionContext:
+    def __init__(self, session_id: Optional[str]):
+        self.user_session_id = session_id
+        self.owns = False
+        self.session_id: Optional[str] = None
+
+    def __enter__(self):
+        interpreter.ensure_container()
+        _ensure_base_dir()
+        if self.user_session_id:
+            # Only allow previously created session IDs; do not auto-create directories
+            with _lock:
+                if self.user_session_id not in _sessions:
+                    raise ValueError("invalid session_id (use init() to create one)")
+            self.session_id = self.user_session_id
+        else:
+            self.session_id = _create_session()
+            self.owns = True
+        _touch(self.session_id)
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.owns and self.session_id:
+            _remove_session(self.session_id)
+        return False
+
+    @property
+    def dir(self) -> str:
+        if not self.session_id:
+            raise RuntimeError("Session not initialized")
+        return _session_path(self.session_id)
+
+def _map_container_path(path: str, session_dir: str) -> str:
+    if path.startswith('/'):
+        return path
+    return f"{session_dir}/{path}"
+
 @mcp.tool(
-    description='Initialize or start the Docker container. \n'+
-                'Use this tool if you need to initialize `/workspace` directory or start a Docker container .'
-    )
+    description='Start or ensure the Docker container, and create a fresh ephemeral session. '
+                'Returns a session_id which you should pass to other tools during this reply.'
+)
 def init(ctx: Context) -> str:
-    """Initialize or start the Docker container and install MCP SDK."""
-    return interpreter.init_container()
-
-@mcp.tool(
-    description='Docker Code Interpreter: Run Python Code: \n'+
-                'code: Python code to execute. \n'+
-                'Use this tool when you need to run Python code to get an answer. \n'+
-                'Input must be a valid Python expression or statement. \n'+
-                'Results are displayed in the console, so use functions like print() to print the results. \n'+
-                'If you need to pass an output graph or file to the user, also use the cp_out tool. '
-    )
-def run_code(code: str, ctx: Context) -> str:
-    """Execute Python code in the container."""
+    """Start/ensure Docker container and create a new session. Returns session_id."""
     interpreter.ensure_container()
-    return interpreter.exec_code(code)
+    _ensure_base_dir()
+    return _create_session()
 
 @mcp.tool(
-    description='Docker Code Interpreter: Run Python Script: \n'+
-                'path: filename (treated as /workspace/<filename>) or full container path. \n'+ 
-                'Use this tool when you need to run a Python script to get an answer. \n'+
-                'Input can be a relative path from the working directory or an absolute path. \n'+
-                'The script will be executed in the container, and the output will be displayed in the console. \n'+
-                'If you need to pass an output graph or file to the user, also use the cp_out tool. '
-    )
-def run_file(path: str, ctx: Context) -> str:
-    """Execute a Python script file inside the container (container-internal path)."""
-    interpreter.ensure_container()
-    return interpreter.exec_container_file(path)
+    description='Run Python code inside the container. Optional session_id enables an ephemeral workspace. '
+                'If session_id is omitted, a one-shot session is created and cleaned up automatically.'
+)
+def run_code(code: str, session_id: str | None = None, ctx: Context | None = None) -> str:
+    with _SessionContext(session_id) as sess:
+        return interpreter.exec_code(code, workdir=sess.dir)
 
 @mcp.tool(
-    description='Docker Code Interpreter: Upload a file from host UPLOAD_DIR into the Docker container. \n'+
-                'local_path: filename (treated as UPLOAD_DIR/<filename>)\n'+
-                'container_path (optional): target path inside container, defaults to /workspace/<basename>.'+
-                'Usually does not need to be specified.'
-    )
-def cp_in(local_path: str, container_path: str | None = None, ctx: Context = None) -> str:
-    """Copy a file from host UPLOAD_DIR into the container.
-    local_path: path relative to UPLOAD_DIR.
-    container_path: optional path inside container (defaults to /workspace/<basename of local_path>)."""
-    interpreter.ensure_container()
-    # Determine default container path if not specified
-    if not container_path:
-        base = os.path.basename(local_path)
-        container_path = f"/workspace/{base}"
-    return interpreter.cp_in(local_path, container_path)
+    description='Run a Python script inside the container (session_id is required). '
+                'Path must be relative to the session workspace.'
+)
+def run_file(path: str, session_id: str, ctx: Context | None = None) -> str:
+    _ensure_relative_posix(path)
+    with _SessionContext(session_id) as sess:
+        effective = f"{sess.dir}/{path}"
+        return interpreter.exec_container_file(effective, workdir=sess.dir)
+
+def _ensure_relative_posix(path: str) -> None:
+    from pathlib import PurePosixPath
+    p = PurePosixPath(path)
+    if p.is_absolute() or any(part == '..' for part in p.parts):
+        raise ValueError('only relative paths without .. are allowed')
 
 @mcp.tool(
-    description='Docker Code Interpreter: Download a file from the Docker container into host DOWNLOAD_DIR. \n'+
-                'container_path: filename (treated as /workspace/<filename>) or full container path. \n'+
-                'local_path (optional): relative path under DOWNLOAD_DIR, defaults to basename of container_path.'+
-                'Usually does not need to be specified.'
-    )
-def cp_out(container_path: str, local_path: str | None = None, ctx: Context = None) -> str:
-    """Copy a file from the container to host DOWNLOAD_DIR.
-    container_path: path inside container.
-    local_path: optional relative path under DOWNLOAD_DIR (defaults to basename of container_path)."""
-    interpreter.ensure_container()
-    # Determine default local path if not specified
-    if not local_path:
-        local_path = os.path.basename(container_path)
-    # If a bare filename is given, treat it as /workspace/<filename> inside container
-    if not container_path.startswith('/') and '/' not in container_path:
-        effective_src = f"/workspace/{container_path}"
-    else:
-        effective_src = container_path
-    return interpreter.cp_out(effective_src, local_path)
+    description='Upload a file from host UPLOAD_DIR into the container (session_id is required). '
+                'container_path must be relative and is resolved under the session workspace.'
+)
+def cp_in(local_path: str, container_path: str | None, session_id: str, ctx: Context | None = None) -> str:
+    with _SessionContext(session_id) as sess:
+        if not container_path:
+            base = os.path.basename(local_path)
+            container_path = base
+        _ensure_relative_posix(container_path)
+        effective = f"{sess.dir}/{container_path}"
+        return interpreter.cp_in(local_path, effective)
 
 @mcp.tool(
-    description='Docker Code Interpreter: Edit or create a file inside the Docker container. \n'+
-                'container_path: filename (treated as /workspace/<filename>) or full container path. \n'+
-                'content: text to write into the file. \n'+
-                'If you want to provide a file to a user, also use the cp_out tool.'
-                
-    )
-def edit_file(container_path: str, content: str, ctx: Context) -> str:
-    """Edit or create a file inside the container, writing the provided content.
-    container_path: filename or full container path.
-    content: file content to write."""
-    interpreter.ensure_container()
-    # Map bare filenames into /workspace
-    if not container_path.startswith('/') and '/' not in container_path:
-        effective_path = f"/workspace/{container_path}"
-    else:
-        effective_path = container_path
-    return interpreter.write_file(effective_path, content)
+    description='Download a file from the container to host DOWNLOAD_DIR (session_id is required). '
+                'container_path must be relative to the session workspace. local_path defaults to basename.'
+)
+def cp_out(container_path: str, local_path: str | None, session_id: str, ctx: Context | None = None) -> str:
+    with _SessionContext(session_id) as sess:
+        _ensure_relative_posix(container_path)
+        if not local_path:
+            local_path = os.path.basename(container_path)
+        effective_src = f"{sess.dir}/{container_path}"
+        return interpreter.cp_out(effective_src, local_path)
 
 @mcp.tool(
-    description='Docker Code Interpreter: List installed Python packages inside the Docker container. \n'+
-                'Use this tool when you need to list the installed packages in the container.'
-    )
-def list_packages(ctx: Context) -> str:
-    """List installed Python packages inside the container."""
+    description='Create or edit a file inside the container (session_id is required). '
+                'container_path must be relative to the session workspace.'
+)
+def edit_file(container_path: str, content: str, session_id: str, ctx: Context | None = None) -> str:
+    with _SessionContext(session_id) as sess:
+        _ensure_relative_posix(container_path)
+        effective = f"{sess.dir}/{container_path}"
+        return interpreter.write_file(effective, content)
+
+@mcp.tool(
+    description='List installed Python packages inside the container.'
+)
+def list_packages(session_id: str | None = None, ctx: Context | None = None) -> str:
     interpreter.ensure_container()
     return interpreter.list_packages()
 
 @mcp.tool(
-    description='Docker Code Interpreter: Reset the Docker container to initial state. \n'+
-                'Use this tool when you need to reset the container to its initial state.'
-    )
+    description='Reset the Docker container to initial state. All sessions are cleared.'
+)
 def reset(ctx: Context) -> str:
-    """Reset the Docker container, removing and recreating it."""
+    with _lock:
+        sids = list(_sessions.keys())
+    for sid in sids:
+        _remove_session(sid)
     return interpreter.reset()
+
+@mcp.tool(
+    description='Close a session immediately and remove its workspace.'
+)
+def close_session(session_id: str, ctx: Context | None = None) -> str:
+    if not session_id:
+        return "session_id is required"
+    _remove_session(session_id)
+    return f"closed {session_id}"
 
 if __name__ == "__main__":
     mcp.run(transport='stdio')

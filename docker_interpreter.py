@@ -94,10 +94,16 @@ class DockerInterpreter:
         if not self.container_running():
             self.init_container()
 
-    def exec_code(self, code: str) -> str:
-        """Execute given Python code string inside the container."""
+    def exec_code(self, code: str, workdir: str | None = None) -> str:
+        """Execute given Python code string inside the container.
+        If workdir is provided, run with that as the current working directory.
+        """
+        cmd = ['exec', '-i']
+        if workdir:
+            cmd += ['-w', workdir]
+        cmd += [self.container_name, 'python']
         result = self.run_command(
-            ['exec', '-i', self.container_name, 'python'],
+            cmd,
             capture_output=True,
             check=False,
             input=code,
@@ -126,10 +132,16 @@ class DockerInterpreter:
         output += f"\nExit code: {result.returncode}"
         return output
     
-    def exec_container_file(self, container_path: str) -> str:
-        """Execute a Python script file at the given path inside the container."""
+    def exec_container_file(self, container_path: str, workdir: str | None = None) -> str:
+        """Execute a Python script file at the given path inside the container.
+        If workdir is provided, run with that as the current working directory.
+        """
+        cmd = ['exec']
+        if workdir:
+            cmd += ['-w', workdir]
+        cmd += [self.container_name, 'python', container_path]
         result = self.run_command(
-            ['exec', self.container_name, 'python', container_path],
+            cmd,
             capture_output=True,
             check=False,
         )
@@ -154,6 +166,14 @@ class DockerInterpreter:
             output += f"\nstderr:\n{result.stderr}"
         output += f"\nExit code: {result.returncode}"
         return output
+
+    def make_dir(self, container_path: str) -> None:
+        """Create a directory inside the container (mkdir -p)."""
+        self.run_command(['exec', self.container_name, 'mkdir', '-p', container_path])
+
+    def remove_dir(self, container_path: str) -> None:
+        """Remove a directory inside the container (rm -rf)."""
+        self.run_command(['exec', self.container_name, 'sh', '-c', f'rm -rf {container_path}'])
 
     def cp_in(self, src: str, dst: str) -> str:
         """Copy a file from host working directory into container at dst."""
