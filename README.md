@@ -105,16 +105,22 @@ docker build -t code_interpreter .
 - continuumio/miniconda3: Conda 環境で柔軟にパッケージを管理できるイメージ  
 - python:3.13-slim ベースに `pip install numpy pandas scipy scikit-learn matplotlib seaborn jupyter plotly` を行うカスタムイメージ
 
-### セッションとエフェメラルワークスペース（新機能）
+### セッション管理（カレントセッション対応）
 
-- init ツールを呼ぶと session_id が払い出されます。以降のツール呼び出しに session_id を渡すと、
-  コンテナ内の `/workspace/sessions/<session_id>/` 以下がその応答専用の作業領域になります。
-- session_id を省略すると、各ツール呼び出しごとに一時セッションが自動作成され、処理完了後に即削除されます。
+- init ツールを呼ぶと session_id が払い出され、同時に「カレントセッション」に設定されます。
+- 各ツールで session_id を省略した場合は、カレントセッションが自動的に使われます。カレントが存在しない場合は新規作成され、以後も継続利用されます。
 - セッションは最後の利用から既定で10分後に自動削除されます（環境変数 PY_EXEC_SESSION_TTL で変更可能）。
 - 同時セッション数の上限は既定で32です（PY_EXEC_SESSION_MAX で変更可能）。
+- 明示的なワンショット実行が必要な場合は `run_code_ephemeral` を利用できます（実行後に即時クリーンアップ）。
 
-主なツール引数の違い:
+便利ツール:
+- get_current_session(): 現在の session_id を取得
+- new_current_session(): 新しいセッションを作成してカレントに設定
+- close_current_session(): カレントセッションを閉じる
+
+主なツール引数:
 - run_code(code, session_id=None)
+- run_code_ephemeral(code)
 - run_file(path, session_id=None)  # 相対パスはセッション作業領域相対
 - cp_in(local_path, container_path=None, session_id=None)  # container_path が相対ならセッション配下
 - cp_out(container_path, local_path=None, session_id=None) # container_path が相対ならセッション配下
