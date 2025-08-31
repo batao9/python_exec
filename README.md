@@ -105,26 +105,24 @@ docker build -t code_interpreter .
 - continuumio/miniconda3: Conda 環境で柔軟にパッケージを管理できるイメージ  
 - python:3.13-slim ベースに `pip install numpy pandas scipy scikit-learn matplotlib seaborn jupyter plotly` を行うカスタムイメージ
 
-### セッション管理（カレントセッション対応）
+### セッション管理（カレントセッション・呼び出し側からの session_id 非公開）
 
 - init ツールを呼ぶと session_id が払い出され、同時に「カレントセッション」に設定されます。
-- 各ツールで session_id を省略した場合は、カレントセッションが自動的に使われます。カレントが存在しない場合は新規作成され、以後も継続利用されます。
+- 呼び出し側は session_id を指定する必要はありません（指定もできません）。各ツールは常にカレントセッションを利用し、存在しない場合は新規作成され、以後も継続利用されます。
+- カレントセッションは最後の利用から既定で10分が経過すると（PY_EXEC_SESSION_TTL で変更可）、自動的に新しいセッションに切り替わります（セッションの永続化が有効な環境でも、古いセッションに誤接続しないようにするため）。
+- カレントセッションはコンテナ内のマーカー（`/workspace/sessions/.current`）にも保存されるため、プロセスが再起動しても同じ環境を継続できます。
 - セッションは最後の利用から既定で10分後に自動削除されます（環境変数 PY_EXEC_SESSION_TTL で変更可能）。
 - 同時セッション数の上限は既定で32です（PY_EXEC_SESSION_MAX で変更可能）。
 - 明示的なワンショット実行が必要な場合は `run_code_ephemeral` を利用できます（実行後に即時クリーンアップ）。
-
-便利ツール:
-- get_current_session(): 現在の session_id を取得
-- new_current_session(): 新しいセッションを作成してカレントに設定
-- close_current_session(): カレントセッションを閉じる
+- セッション操作ツール（最小限）: close_current_session() でカレントセッションを明示的に閉じられます。
 
 主なツール引数:
-- run_code(code, session_id=None)
+- run_code(code)
 - run_code_ephemeral(code)
-- run_file(path, session_id=None)  # 相対パスはセッション作業領域相対
-- cp_in(local_path, container_path=None, session_id=None)  # container_path が相対ならセッション配下
-- cp_out(container_path, local_path=None, session_id=None) # container_path が相対ならセッション配下
-- edit_file(container_path, content, session_id=None)      # 相対ならセッション配下
+- run_file(path)                       # 相対パスはセッション作業領域相対
+- cp_in(local_path, container_path=None)  # container_path が相対ならセッション配下
+- cp_out(container_path, local_path=None) # container_path が相対ならセッション配下
+- edit_file(container_path, content)      # 相対ならセッション配下
 
-不要になったセッションは close_session(session_id) で即時削除できます。reset はコンテナを再作成し、すべてのセッションをクリアします。
+reset はコンテナを再作成し、すべてのセッションをクリアします。
 

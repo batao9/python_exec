@@ -2,11 +2,10 @@
 MCP server exposing Docker-based Python code interpreter tools.
 
 Now supports a per-connection "current session" so that callers do not
-need to manually pass a session_id on each tool call. A session is
-identified by a session_id issued by init(). Tools accept an optional
-session_id. If omitted, the server will use the connection's current
-session, creating one if necessary, and keep it for subsequent calls.
-An explicit ephemeral one-shot mode is also provided via run_code_ephemeral.
+need to manually pass or even see a session_id. A session is identified
+internally by a session_id issued by init(). Tools implicitly use the
+current session, creating one if necessary. An explicit ephemeral
+one-shot mode is also provided via run_code_ephemeral.
 """
 # Standard library imports
 import sys
@@ -61,8 +60,15 @@ interpreter.host_workdir = Path(base_workdir).resolve()
 # Session management (in-process)
 # -----------------------------
 SESSION_BASE_DIR = "/workspace/sessions"
-SESSION_TTL_SECONDS = int(os.environ.get("PY_EXEC_SESSION_TTL", "600"))
-SESSION_MAX = int(os.environ.get("PY_EXEC_SESSION_MAX", "32"))
+SESSION_TTL_SECONDS = int(
+    (env_config.get("PY_EXEC_SESSION_TTL") if env_config else None)
+    or os.environ.get("PY_EXEC_SESSION_TTL", "600")
+)
+SESSION_MAX = int(
+    (env_config.get("PY_EXEC_SESSION_MAX") if env_config else None)
+    or os.environ.get("PY_EXEC_SESSION_MAX", "32")
+)
+CURRENT_FILE = f"{SESSION_BASE_DIR}/.current"
 
 _sessions: dict[str, tuple[float, float]] = {}
 # Current session per-connection. For stdio transport we assume one
@@ -91,8 +97,27 @@ def _touch(session_id: str) -> None:
         if session_id in _sessions:
             created = _sessions[session_id][1]
             _sessions[session_id] = (now, created)
+    # Persist last-used timestamp for cross-process TTL handling
+    try:
+        interpreter.ensure_container()
+        _ensure_base_dir()
+        # Write last-used timestamp (epoch seconds) inside the session directory
+        if hasattr(interpreter, 'write_file'):
+            interpreter.write_file(f"{_session_path(session_id)}/.last_used", str(now))
+    except Exception:
+        pass
 
 def _get_current_session() -> Optional[str]:
+    with _lock:
+        sid = _current_session_id
+    if sid:
+        return sid
+    # Try to lazily load from persisted state
+    try:
+        _load_persisted_current()
+    except Exception:
+        # Ignore load errors; treat as no current session
+        return None
     with _lock:
         return _current_session_id
 
@@ -100,6 +125,103 @@ def _set_current_session(session_id: Optional[str]) -> None:
     with _lock:
         global _current_session_id
         _current_session_id = session_id
+    try:
+        _persist_current(session_id)
+    except Exception:
+        # Persist failure should not break tool behavior
+        pass
+
+def _persist_current(session_id: Optional[str]) -> None:
+    """Persist or clear the current session marker inside the container."""
+    interpreter.ensure_container()
+    _ensure_base_dir()
+    if session_id:
+        if hasattr(interpreter, 'write_file'):
+            interpreter.write_file(CURRENT_FILE, session_id + "\n")
+    else:
+        # Remove marker file if present
+        try:
+            if hasattr(interpreter, 'run_command'):
+                interpreter.run_command(['exec', interpreter.container_name, 'sh', '-lc', f'rm -f {CURRENT_FILE}'])
+        except Exception:
+            pass
+
+def _session_dir_exists(session_id: str) -> bool:
+    try:
+        if hasattr(interpreter, 'run_command'):
+            res = interpreter.run_command(
+                ['exec', interpreter.container_name, 'sh', '-lc', f'test -d {_session_path(session_id)}'],
+                capture_output=True,
+                check=False,
+            )
+            return res.returncode == 0
+    except Exception:
+        pass
+    return False
+
+def _load_persisted_current() -> None:
+    """Load current session id from container marker and register it if valid."""
+    interpreter.ensure_container()
+    _ensure_base_dir()
+    try:
+        if hasattr(interpreter, 'run_command'):
+            res = interpreter.run_command(
+                ['exec', interpreter.container_name, 'sh', '-lc', f'[ -f {CURRENT_FILE} ] && cat {CURRENT_FILE} || true'],
+                capture_output=True,
+                check=False,
+            )
+            sid = (res.stdout or '').strip()
+        else:
+            sid = ''
+    except Exception:
+        sid = ''
+    if not sid:
+        return
+    # Check TTL based on persisted last-used timestamp (or directory mtime as fallback)
+    last_used = _read_session_last_used(sid)
+    now_ts = time.time()
+    if last_used is not None and (now_ts - last_used) > SESSION_TTL_SECONDS:
+        # Expired: create a fresh session and set it current
+        new_sid = _create_session()
+        _set_current_session(new_sid)
+        return
+    # If the directory doesn't exist, create it
+    if not _session_dir_exists(sid):
+        if hasattr(interpreter, 'make_dir'):
+            interpreter.make_dir(_session_path(sid))
+    now = time.time()
+    with _lock:
+        _sessions[sid] = (now, now)
+        global _current_session_id
+        _current_session_id = sid
+
+def _read_session_last_used(session_id: str) -> Optional[float]:
+    """Read the last-used time for a session from its marker file or directory mtime."""
+    try:
+        # Prefer the .last_used file written by _touch
+        if hasattr(interpreter, 'read_file'):
+            content, rc = interpreter.read_file(f"{_session_path(session_id)}/.last_used")
+            if rc == 0:
+                try:
+                    return float((content or '').strip())
+                except Exception:
+                    pass
+        # Fallback: use directory mtime
+        if hasattr(interpreter, 'run_command'):
+            res = interpreter.run_command(
+                ['exec', interpreter.container_name, 'sh', '-lc', f'stat -c %Y {_session_path(session_id)} 2>/dev/null || echo 0'],
+                capture_output=True,
+                check=False,
+            )
+            try:
+                ts = int((res.stdout or '0').strip() or '0')
+                if ts > 0:
+                    return float(ts)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return None
 
 def _create_session() -> str:
     session_id = _new_session_id()
@@ -220,11 +342,10 @@ def init(ctx: Context) -> str:
     return sid
 
 @mcp.tool(
-    description='Run Python code inside the container. If session_id is omitted, uses the current session '
-                '(creating one if needed).'
+    description='Run Python code inside the container using the current session (created if needed).'
 )
-def run_code(code: str, session_id: str | None = None, ctx: Context | None = None) -> str:
-    with _SessionContext(session_id, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
+def run_code(code: str, ctx: Context | None = None) -> str:
+    with _SessionContext(None, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
         return interpreter.exec_code(code, workdir=sess.dir)
 
 @mcp.tool(
@@ -235,12 +356,12 @@ def run_code_ephemeral(code: str, ctx: Context | None = None) -> str:
         return interpreter.exec_code(code, workdir=sess.dir)
 
 @mcp.tool(
-    description='Run a Python script inside the container. Path must be relative to the session workspace. '
-                'If session_id is omitted, uses the current session (creating one if needed).'
+    description='Run a Python script inside the container using the current session. '
+                'Path must be relative to the session workspace.'
 )
-def run_file(path: str, session_id: str | None = None, ctx: Context | None = None) -> str:
+def run_file(path: str, ctx: Context | None = None) -> str:
     _ensure_relative_posix(path)
-    with _SessionContext(session_id, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
+    with _SessionContext(None, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
         effective = f"{sess.dir}/{path}"
         return interpreter.exec_container_file(effective, workdir=sess.dir)
 
@@ -252,11 +373,10 @@ def _ensure_relative_posix(path: str) -> None:
 
 @mcp.tool(
     description='Upload a file from host UPLOAD_DIR into the container. container_path must be relative and '
-                'is resolved under the session workspace. If session_id is omitted, uses the current session '
-                '(creating one if needed).'
+                'is resolved under the current session workspace.'
 )
-def cp_in(local_path: str, container_path: str | None, session_id: str | None = None, ctx: Context | None = None) -> str:
-    with _SessionContext(session_id, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
+def cp_in(local_path: str, container_path: str | None, ctx: Context | None = None) -> str:
+    with _SessionContext(None, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
         if not container_path:
             base = os.path.basename(local_path)
             container_path = base
@@ -266,11 +386,10 @@ def cp_in(local_path: str, container_path: str | None, session_id: str | None = 
 
 @mcp.tool(
     description='Download a file from the container to host DOWNLOAD_DIR. container_path must be relative to the '
-                'session workspace. local_path defaults to basename. If session_id is omitted, uses the current '
-                'session (creating one if needed).'
+                'current session workspace. local_path defaults to basename.'
 )
-def cp_out(container_path: str, local_path: str | None, session_id: str | None = None, ctx: Context | None = None) -> str:
-    with _SessionContext(session_id, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
+def cp_out(container_path: str, local_path: str | None, ctx: Context | None = None) -> str:
+    with _SessionContext(None, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
         _ensure_relative_posix(container_path)
         if not local_path:
             local_path = os.path.basename(container_path)
@@ -278,11 +397,11 @@ def cp_out(container_path: str, local_path: str | None, session_id: str | None =
         return interpreter.cp_out(effective_src, local_path)
 
 @mcp.tool(
-    description='Create or edit a file inside the container. container_path must be relative to the session '
-                'workspace. If session_id is omitted, uses the current session (creating one if needed).'
+    description='Create or edit a file inside the container. container_path must be relative to the current '
+                'session workspace.'
 )
-def edit_file(container_path: str, content: str, session_id: str | None = None, ctx: Context | None = None) -> str:
-    with _SessionContext(session_id, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
+def edit_file(container_path: str, content: str, ctx: Context | None = None) -> str:
+    with _SessionContext(None, use_current_if_missing=True, ephemeral_if_missing=False) as sess:
         _ensure_relative_posix(container_path)
         effective = f"{sess.dir}/{container_path}"
         return interpreter.write_file(effective, content)
@@ -290,7 +409,7 @@ def edit_file(container_path: str, content: str, session_id: str | None = None, 
 @mcp.tool(
     description='List installed Python packages inside the container.'
 )
-def list_packages(session_id: str | None = None, ctx: Context | None = None) -> str:
+def list_packages(ctx: Context | None = None) -> str:
     interpreter.ensure_container()
     return interpreter.list_packages()
 
@@ -305,30 +424,7 @@ def reset(ctx: Context) -> str:
     _set_current_session(None)
     return interpreter.reset()
 
-@mcp.tool(
-    description='Close a session immediately and remove its workspace.'
-)
-def close_session(session_id: str, ctx: Context | None = None) -> str:
-    if not session_id:
-        return "session_id is required"
-    _remove_session(session_id)
-    return f"closed {session_id}"
-
-@mcp.tool(
-    description='Get the current session_id for this connection (empty if none).'
-)
-def get_current_session(ctx: Context | None = None) -> str:
-    return _get_current_session() or ""
-
-@mcp.tool(
-    description='Create a new session and set it as the current session for this connection.'
-)
-def new_current_session(ctx: Context | None = None) -> str:
-    interpreter.ensure_container()
-    _ensure_base_dir()
-    sid = _create_session()
-    _set_current_session(sid)
-    return sid
+# close_session and other session-id level controls are intentionally not exposed
 
 @mcp.tool(
     description='Close the current session for this connection.'
